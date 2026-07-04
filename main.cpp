@@ -39,6 +39,12 @@ struct text_run_t {
     style_t style;
 };
 
+enum text_alignment_t {
+    ALIGN_LEFT,
+    ALIGN_CENTER,
+    ALIGN_RIGHT
+};
+
 struct cell_t {
     std::string raw;
     std::vector<text_run_t> runs;
@@ -55,6 +61,7 @@ struct row_t {
 
 struct table_t {
     std::vector<row_t> rows;
+    std::vector<text_alignment_t> alignments;
     std::size_t column_count;
 
     table_t() : column_count(0u)
@@ -448,13 +455,16 @@ static std::vector<std::string> split_markdown_row(const std::string& line)
     return cells;
 }
 
-static bool is_separator_cell(const std::string& value)
+static bool parse_separator_cell(const std::string& value, text_alignment_t* alignment)
 {
     std::string cell = trim(value);
     std::size_t index = 0u;
     std::size_t dash_count = 0u;
+    bool leading_colon = false;
+    bool trailing_colon = false;
 
     if (!cell.empty() && cell[0] == ':') {
+        leading_colon = true;
         index++;
     }
 
@@ -468,6 +478,7 @@ static bool is_separator_cell(const std::string& value)
     }
 
     if (index < cell.size() && cell[index] == ':') {
+        trailing_colon = true;
         index++;
     }
 
@@ -478,7 +489,24 @@ static bool is_separator_cell(const std::string& value)
         index++;
     }
 
+    if (alignment != NULL) {
+        if (leading_colon && trailing_colon) {
+            *alignment = ALIGN_CENTER;
+        } else if (trailing_colon) {
+            *alignment = ALIGN_RIGHT;
+        } else {
+            *alignment = ALIGN_LEFT;
+        }
+    }
+
     return true;
+}
+
+static bool is_separator_cell(const std::string& value)
+{
+    text_alignment_t alignment = ALIGN_LEFT;
+
+    return parse_separator_cell(value, &alignment);
 }
 
 static bool is_separator_line(const std::string& line)
@@ -493,6 +521,33 @@ static bool is_separator_line(const std::string& line)
     for (index = 0u; index < cells.size(); index++) {
         if (!is_separator_cell(cells[index])) {
             return false;
+        }
+    }
+
+    return true;
+}
+
+static bool parse_separator_line(const std::string& line, std::vector<text_alignment_t>* alignments)
+{
+    std::vector<std::string> cells = split_markdown_row(line);
+    std::size_t index = 0u;
+
+    if (cells.empty()) {
+        return false;
+    }
+
+    if (alignments != NULL) {
+        alignments->clear();
+    }
+
+    for (index = 0u; index < cells.size(); index++) {
+        text_alignment_t alignment = ALIGN_LEFT;
+
+        if (!parse_separator_cell(cells[index], &alignment)) {
+            return false;
+        }
+        if (alignments != NULL) {
+            alignments->push_back(alignment);
         }
     }
 
@@ -535,6 +590,10 @@ static bool parse_table(const std::string& markdown, table_t* table, std::string
         *error = "No Markdown table was found. Expected a header row followed by a separator row.";
         return false;
     }
+    if (!parse_separator_line(lines[start + 1u], &table->alignments)) {
+        *error = "The Markdown table separator row is malformed.";
+        return false;
+    }
 
     for (index = start; index < lines.size(); index++) {
         std::vector<std::string> raw_cells;
@@ -573,6 +632,9 @@ static bool parse_table(const std::string& markdown, table_t* table, std::string
             table->rows[index].cells.push_back(make_cell(""));
         }
     }
+    while (table->alignments.size() < table->column_count) {
+        table->alignments.push_back(ALIGN_LEFT);
+    }
 
     return true;
 }
@@ -610,16 +672,26 @@ static bool read_file_limited(const std::string& path, std::string* content, std
     return true;
 }
 
-static std::string default_svg_path(const std::string& png_path)
+static std::string replace_extension(const std::string& path, const std::string& extension)
 {
-    std::size_t slash = png_path.find_last_of("/\\");
-    std::size_t dot = png_path.find_last_of('.');
+    std::size_t slash = path.find_last_of("/\\");
+    std::size_t dot = path.find_last_of('.');
 
     if (dot != std::string::npos && (slash == std::string::npos || dot > slash)) {
-        return png_path.substr(0u, dot) + ".svg";
+        return path.substr(0u, dot) + extension;
     }
 
-    return png_path + ".svg";
+    return path + extension;
+}
+
+static std::string default_png_path(const std::string& input_path)
+{
+    return replace_extension(input_path, ".png");
+}
+
+static std::string default_svg_path(const std::string& png_path)
+{
+    return replace_extension(png_path, ".svg");
 }
 
 static int clamped_column_width(std::size_t content_length)
@@ -668,6 +740,50 @@ static int estimate_run_width(const text_run_t& run)
     return width;
 }
 
+static int estimate_cell_text_width(const cell_t& cell, bool force_bold)
+{
+    int width = 0;
+    std::size_t index = 0u;
+
+    for (index = 0u; index < cell.runs.size(); index++) {
+        text_run_t run = cell.runs[index];
+
+        if (force_bold) {
+            run.style.bold = true;
+        }
+        width += estimate_run_width(run);
+    }
+
+    return width;
+}
+
+static text_alignment_t column_alignment(const table_t& table, std::size_t column)
+{
+    if (column < table.alignments.size()) {
+        return table.alignments[column];
+    }
+
+    return ALIGN_LEFT;
+}
+
+static int aligned_text_x(int cell_x, int cell_width, int content_width, text_alignment_t alignment)
+{
+    const int left_x = cell_x + CELL_PADDING_X;
+    const int inner_width = cell_width - (CELL_PADDING_X * 2);
+
+    if (content_width >= inner_width) {
+        return left_x;
+    }
+    if (alignment == ALIGN_CENTER) {
+        return left_x + ((inner_width - content_width) / 2);
+    }
+    if (alignment == ALIGN_RIGHT) {
+        return cell_x + cell_width - CELL_PADDING_X - content_width;
+    }
+
+    return left_x;
+}
+
 static bool write_svg(const table_t& table, const std::string& path, int* width_out, int* height_out, std::string* error)
 {
     std::vector<int> column_widths = compute_column_widths(table);
@@ -702,7 +818,8 @@ static bool write_svg(const table_t& table, const std::string& path, int* width_
         for (column = 0u; column < table.column_count; column++) {
             const cell_t& cell = table.rows[row].cells[column];
             const std::string fill = row == 0u ? "#eef3f8" : (row % 2u == 0u ? "#ffffff" : "#fbfcfd");
-            int text_x = x + CELL_PADDING_X;
+            const int content_width = estimate_cell_text_width(cell, row == 0u);
+            int text_x = aligned_text_x(x, column_widths[column], content_width, column_alignment(table, column));
             const int text_y = y + CELL_PADDING_Y + FONT_SIZE;
             std::size_t run_index = 0u;
 
@@ -1105,10 +1222,11 @@ static void print_help()
 {
     std::cout
         << "Usage:\n"
-        << "  itable <input.md> <output.png> [--svg <output.svg>]\n"
-        << "  itable --input <input.md> --output <output.png> [--svg <output.svg>]\n\n"
+        << "  itable <input.md> [output.png] [--svg <output.svg>]\n"
+        << "  itable --input <input.md> [--output <output.png>] [--svg <output.svg>]\n\n"
         << "The first Markdown table is converted to SVG, then the generated SVG is rendered to PNG.\n"
-        << "Inline markers: **bold**, *italic*, <b>, <i>, <span style=\"color:#0969da\">, [color=red].\n";
+        << "Inline markers: **bold**, *italic*, <b>, <i>, <span style=\"color:#0969da\">, [color=red].\n"
+        << "Column alignment follows Markdown separator syntax: :---, :---:, and ---:.\n";
 }
 
 static bool parse_arguments(int argc, char** argv, options_t* options, std::string* error)
@@ -1177,8 +1295,7 @@ static bool parse_arguments(int argc, char** argv, options_t* options, std::stri
         return false;
     }
     if (options->png_path.empty()) {
-        *error = "Missing output PNG file.";
-        return false;
+        options->png_path = default_png_path(options->input_path);
     }
     if (options->svg_path.empty()) {
         options->svg_path = default_svg_path(options->png_path);
