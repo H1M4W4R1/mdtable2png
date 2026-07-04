@@ -22,7 +22,7 @@ static const int FONT_SIZE = 16;
 static const int MIN_COLUMN_WIDTH = 96;
 static const int MAX_COLUMN_WIDTH = 420;
 static const int ROW_HEIGHT = 42;
-static const char* VERSION_TEXT = "itable 0.1.0";
+static const char* VERSION_TEXT = "mdtable2png 0.1.0";
 
 struct style_t {
     bool bold;
@@ -1222,8 +1222,8 @@ static void print_help()
 {
     std::cout
         << "Usage:\n"
-        << "  itable <input.md> [output.png] [--svg <output.svg>]\n"
-        << "  itable --input <input.md> [--output <output.png>] [--svg <output.svg>]\n\n"
+        << "  mdtable2png <input.md> [output.png] [--svg <output.svg>]\n"
+        << "  mdtable2png --input <input.md> [--output <output.png>] [--svg <output.svg>]\n\n"
         << "The first Markdown table is converted to SVG, then the generated SVG is rendered to PNG.\n"
         << "Inline markers: **bold**, *italic*, <b>, <i>, <span style=\"color:#0969da\">, [color=red].\n"
         << "Column alignment follows Markdown separator syntax: :---, :---:, and ---:.\n";
@@ -1314,8 +1314,8 @@ int main(int argc, char** argv)
     int svg_height = 0;
 
     if (!parse_arguments(argc, argv, &options, &error)) {
-        std::cerr << "itable: " << error << std::endl;
-        std::cerr << "Try 'itable --help' for usage." << std::endl;
+        std::cerr << "mdtable2png: " << error << std::endl;
+        std::cerr << "Try 'mdtable2png --help' for usage." << std::endl;
         return 2;
     }
 
@@ -1329,19 +1329,19 @@ int main(int argc, char** argv)
     }
 
     if (!read_file_limited(options.input_path, &markdown, &error)) {
-        std::cerr << "itable: " << error << std::endl;
+        std::cerr << "mdtable2png: " << error << std::endl;
         return 1;
     }
     if (!parse_table(markdown, &table, &error)) {
-        std::cerr << "itable: " << error << std::endl;
+        std::cerr << "mdtable2png: " << error << std::endl;
         return 1;
     }
     if (!write_svg(table, options.svg_path, &svg_width, &svg_height, &error)) {
-        std::cerr << "itable: " << error << std::endl;
+        std::cerr << "mdtable2png: " << error << std::endl;
         return 1;
     }
     if (!render_svg_to_png(options.svg_path, options.png_path, &error)) {
-        std::cerr << "itable: " << error << std::endl;
+        std::cerr << "mdtable2png: " << error << std::endl;
         return 1;
     }
 
