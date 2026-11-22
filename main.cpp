@@ -75,8 +75,9 @@ struct options_t {
     std::string svg_path;
     bool show_help;
     bool show_version;
+    bool svg_only;
 
-    options_t() : show_help(false), show_version(false)
+    options_t() : show_help(false), show_version(false), svg_only(false)
     {
     }
 };
@@ -1222,9 +1223,10 @@ static void print_help()
 {
     std::cout
         << "Usage:\n"
-        << "  mdtable2png <input.md> [output.png] [--svg <output.svg>]\n"
-        << "  mdtable2png --input <input.md> [--output <output.png>] [--svg <output.svg>]\n\n"
+        << "  mdtable2png <input.md> [output.png] [--svg <output.svg>] [--svg-only]\n"
+        << "  mdtable2png --input <input.md> [--output <output.png>] [--svg <output.svg>] [--svg-only]\n\n"
         << "The first Markdown table is converted to SVG, then the generated SVG is rendered to PNG.\n"
+        << "With --svg-only, only the SVG file is written and PNG rendering is skipped.\n"
         << "Inline markers: **bold**, *italic*, <b>, <i>, <span style=\"color:#0969da\">, [color=red].\n"
         << "Column alignment follows Markdown separator syntax: :---, :---:, and ---:.\n";
 }
@@ -1264,6 +1266,9 @@ static bool parse_arguments(int argc, char** argv, options_t* options, std::stri
             }
             options->svg_path = argv[index + 1];
             index += 2;
+        } else if (arg == "--svg-only") {
+            options->svg_only = true;
+            index++;
         } else if (!arg.empty() && arg[0] == '-') {
             *error = "Unknown option: " + arg;
             return false;
@@ -1339,6 +1344,10 @@ int main(int argc, char** argv)
     if (!write_svg(table, options.svg_path, &svg_width, &svg_height, &error)) {
         std::cerr << "mdtable2png: " << error << std::endl;
         return 1;
+    }
+    if (options.svg_only) {
+        std::cout << "Wrote " << options.svg_path << " (" << svg_width << "x" << svg_height << ")" << std::endl;
+        return 0;
     }
     if (!render_svg_to_png(options.svg_path, options.png_path, &error)) {
         std::cerr << "mdtable2png: " << error << std::endl;

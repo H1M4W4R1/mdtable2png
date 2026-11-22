@@ -8,6 +8,7 @@ It reads a Markdown file, writes an SVG version of the table, and renders that S
 
 - Converts the first Markdown table found in an input file.
 - Writes both PNG and SVG output.
+- Can write SVG output only with `--svg-only`, skipping PNG rendering. This also works on non-Windows builds.
 - Supports Markdown column alignment:
   - `:---` for left alignment
   - `:---:` for center alignment
@@ -26,7 +27,7 @@ It reads a Markdown file, writes an SVG version of the table, and renders that S
 - A C++98-capable compiler
 - Windows for PNG rendering
 
-PNG rendering is currently implemented with Windows GDI+. Non-Windows builds can still compile the project, but PNG rendering will report that Windows is required.
+PNG rendering is currently implemented with Windows GDI+. Non-Windows builds can still compile the project, but PNG rendering will report that Windows is required. SVG-only output (`--svg-only`) works on every platform.
 
 ## Build
 
@@ -63,6 +64,14 @@ mdtable2png --input <input.md> [--output <output.png>] [--svg <output.svg>]
 
 If no PNG path is provided, `mdtable2png` writes the PNG next to the input file using the `.png` extension. If no SVG path is provided, it writes the SVG next to the PNG using the `.svg` extension.
 
+To write only the SVG file, add `--svg-only`. PNG rendering is skipped and the exit code reports the SVG result alone, so this mode can be used from scripts and CI on any platform:
+
+```sh
+mdtable2png example.md --svg-only
+```
+
+This writes `example.svg` only.
+
 ## Example
 
 Given `example.md`:
@@ -98,8 +107,8 @@ mdtable2png --input example.md --output table.png --svg table.svg
 ```text
 mdtable2png --help
 mdtable2png --version
-mdtable2png <input.md> [output.png] [--svg <output.svg>]
-mdtable2png --input <input.md> [--output <output.png>] [--svg <output.svg>]
+mdtable2png <input.md> [output.png] [--svg <output.svg>] [--svg-only]
+mdtable2png --input <input.md> [--output <output.png>] [--svg <output.svg>] [--svg-only]
 ```
 
 Exit codes:
